@@ -13,6 +13,11 @@ ADMIN_EMAIL=`get_config_value 'admin_email' "team@shoreline.media"`
 ADMIN_PASSWORD=`get_config_value 'admin_password' "password"`
 HTDOCS_REPO=`get_config_value 'htdocs' "git@bitbucket.org:shorelinemedia/shoreline-wpe-starter.git"`
 
+# Generate SSL Certificate
+noroot mkdir ${VVV_PATH_TO_SITE}/ssl
+cd ${VVV_PATH_TO_SITE}/ssl
+openssl req -newkey rsa:2048 -x509 -nodes -keyout "${DOMAIN}.key" -new -out "${DOMAIN}.cert" -subj /CN="${DOMAIN}" -reqexts SAN -extensions SAN -config <(cat /etc/ssl/openssl.cnf <(printf '[SAN]\nsubjectAltName=DNS:${DOMAIN}')) -sha256 -days 3650
+
 # Create an SSH config file on host to make sure host forwarding works
 noroot cat <<EOF >> ~/.ssh/config
 
@@ -121,6 +126,7 @@ fi
 
 cp -f "${VVV_PATH_TO_SITE}/provision/vvv-nginx.conf.tmpl" "${VVV_PATH_TO_SITE}/provision/vvv-nginx.conf"
 sed -i "s#{{DOMAINS_HERE}}#${DOMAINS}#" "${VVV_PATH_TO_SITE}/provision/vvv-nginx.conf"
+sed -i "s#{{DOMAIN_HERE}}#${DOMAIN}#" "${VVV_PATH_TO_SITE}/provision/vvv-nginx.conf"
 
 # Install Composer
 cd ${VVV_PATH_TO_SITE}
