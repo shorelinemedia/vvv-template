@@ -98,7 +98,6 @@ define( 'WP_DEBUG_LOG', true );
 define( 'WP_DEBUG_DISPLAY', false );
 define( 'SCRIPT_DEBUG', true );
 define( 'WP_DISABLE_FATAL_ERROR_HANDLER', true );
-define( 'SAVEQUERIES', false );
 define( 'JETPACK_DEV_DEBUG', true );
 @ini_set( 'display_errors', 0 );
 define( 'WP_ENVIRONMENT_TYPE', 'development' );
