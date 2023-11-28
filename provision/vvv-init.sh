@@ -18,7 +18,6 @@ ADMIN_NAME=$(get_config_value 'admin_name' 'shoreline-admin')
 ADMIN_EMAIL=$(get_config_value 'admin_email' 'team@shoreline.media')
 ADMIN_PASSWORD=$(get_config_value 'admin_password' 'password')
 HTDOCS_REPO=$(get_config_value 'htdocs' '')
-WEBP_EXPRESS=$(get_config_value 'webp_express' '')
 
 # Configure SSH Key permissions
 configure_keys() {
@@ -185,33 +184,6 @@ setup_composer() {
   echo -e "Run 'composer install --no-dev' to install base plugins and 'composer install --dev' to install developer plugins"
 }
 
-# Add nginx rules to support webp express plugin
-# Uses same rules as suggested by WPEngine at https://wpengine.com/support/webp-image-optimization/
-add_webp_express_to_nginx() {
-  config_filename=vvv-nginx-webp-express.conf
-
-  # Check if file exists first!
-  if [[ ! -f "/etc/nginx/${config_filename}" ]]; then
-    # Get config file into variable
-    webp_express_config=$(<"${VVV_PATH_TO_SITE}/provision/${config_filename}")
-    # Output config file to /etc/nginx/vvv-nginx-webp-express.conf
-    echo "${webp_express_config}" >> "/etc/nginx/${config_filename}"
-  fi
-
-
-  # Check if webp express is set in config
-  if [ ! -z "$WEBP_EXPRESS" ]; then
-    # Replace with empty string
-    #sed -i "s#{{WEBP_EXPRESS}}##" "${VVV_PATH_TO_SITE}/provision/vvv-nginx.conf"
-    # Replace {{WEBP_EXPRESS}} reference with include to /etc/nginx/vvv-nginx-webp-express.conf
-    sed -i "s#{{WEBP_EXPRESS}}#include      /etc/nginx/${config_filename};#" "${VVV_PATH_TO_SITE}/provision/vvv-nginx.conf"
-  else
-    # Replace with empty string
-    sed -i "s#{{WEBP_EXPRESS}}##" "${VVV_PATH_TO_SITE}/provision/vvv-nginx.conf"
-  fi
-
-}
-
 # Checkout HTDOCS repo
 checkout_htdocs_repo() {
   if [[ ! -z "$HTDOCS_REPO" ]]; then
@@ -260,7 +232,6 @@ copy_nginx_configs
 sed -i "s#{{DOMAINS_HERE}}#${DOMAINS}#" "${VVV_PATH_TO_SITE}/provision/vvv-nginx.conf"
 
 setup_nginx_certificates
-add_webp_express_to_nginx
 checkout_htdocs_repo
 
 cd ${VVV_PATH_TO_SITE}/public_html
