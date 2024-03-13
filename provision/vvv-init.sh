@@ -92,7 +92,6 @@ initial_wpconfig() {
   WP_CACHE_KEY_SALT=`date +%s | sha256sum | head -c 64`
   noroot wp core config --dbname="${DB_NAME}" --dbuser=wp --dbpass=wp --quiet --extra-php <<PHP
 
-/*define( 'WP_DEBUG', true );*/
 define( 'WP_DEBUG_LOG', true );
 define( 'WP_DEBUG_DISPLAY', false );
 define( 'SCRIPT_DEBUG', true );
@@ -123,8 +122,6 @@ define( 'MWP_SKIP_BOOTSTRAP', true );
 
 
 /** Contact Form 7 **/
-// Stop adding <br> and <p> tags to forms and emails
-define ( 'WPCF7_AUTOP', false );
 // Restrict Access to the Contact Forms to Admins only
 define( 'WPCF7_ADMIN_READ_CAPABILITY', 'manage_options' );
 define( 'WPCF7_ADMIN_READ_WRITE_CAPABILITY', 'manage_options' );
