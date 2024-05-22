@@ -9,6 +9,15 @@ The supported environments are:
 - A subdomain multisite
 - A subdirectory multisite
 
+# ImageMagick PDF error using regenerate thumbnails
+
+Imagemagick changed the security policy on PDFs so regenerating thumbnails/jpgs for PDF files in the 
+media gallery may not work, even on production.  To update the setting locally run the following command:
+
+```
+sudo sed -i 's/^.*policy.*coder.*none.*PDF.*//' /etc/ImageMagick-6/policy.xml
+```
+
 # Configuration
 
 ### The minimum required configuration:
