@@ -293,12 +293,6 @@ function setup_cli() {
   echo "  path: ${PUBLIC_DIR_PATH}" >> "${VVV_PATH_TO_SITE%/}/wp-cli.yml"
 }
 
-# @todo IS THIS REQUIRED???
-function setup_nginx_certificates() {
-  sed -i "s#{vvv_tls_cert}#ssl_certificate /srv/certificates/${VVV_SITE_NAME}/dev.crt;#" "${VVV_PATH_TO_SITE}/provision/vvv-nginx.conf"
-  sed -i "s#{vvv_tls_key}#ssl_certificate_key /srv/certificates/${VVV_SITE_NAME}/dev.key;#" "${VVV_PATH_TO_SITE}/provision/vvv-nginx.conf"
-}
-
 # @description Configure SSH Key permissions
 function configure_keys() {
   # Update permissions for SSH Keys
@@ -428,14 +422,12 @@ else
 fi
 
 copy_nginx_configs
-setup_nginx_certificates
+setup_wp_config_constants
 
 # Install Liquidprompt on first provision only
 if [[ ! -d "/home/vagrant/liquidprompt" ]]; then
   install_liquidprompt
 fi
-
-setup_wp_config_constants
 install_yarn
 yarn_global
 configure_keys
