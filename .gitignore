@@ -20,6 +20,5 @@
 
 # And don't ignore our custom stuff
 !composer.json
-!wp-cli.yml
 !/provision/.update-local.sh.conf
 !/provision/optimize-images.sh

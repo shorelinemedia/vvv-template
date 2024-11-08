@@ -6,32 +6,29 @@ set -eo pipefail
 
 echo " * Custom site template provisioner ${VVV_SITE_NAME} - downloads and installs a copy of WP stable for testing, building client sites, etc"
 
-DOMAIN=$(get_primary_host "${VVV_SITE_NAME}".test)
-DOMAINS=$(get_hosts "${DOMAIN}")
-SITE_TITLE=$(get_config_value 'site_title' "${DOMAIN}")
-WP_VERSION=$(get_config_value 'wp_version' 'latest')
-WP_TYPE=$(get_config_value 'wp_type' "single")
-WP_LOCALE=$(get_config_value 'locale' 'en_US')
+# fetch the first host as the primary domain. If none is available, generate a default using the site name
 DB_NAME=$(get_config_value 'db_name' "${VVV_SITE_NAME}")
-DB_NAME=${DB_NAME//[\\\/\.\<\>\:\"\'\|\?\!\*-]/}
-ADMIN_NAME=$(get_config_value 'admin_name' 'shoreline-admin')
-ADMIN_EMAIL=$(get_config_value 'admin_email' 'team@shoreline.media')
-ADMIN_PASSWORD=$(get_config_value 'admin_password' 'password')
+DB_NAME=${DB_NAME//[\\\/\.\<\>\:\"\'\|\?\!\*]/}
+DB_PREFIX=$(get_config_value 'db_prefix' 'wp_')
+DOMAIN=$(get_primary_host "${VVV_SITE_NAME}".test)
+PUBLIC_DIR=$(get_config_value 'public_dir' "public_html")
+if [[ ! "$PUBLIC_DIR" =~ ^"/" ]]; then
+  PUBLIC_DIR="/${PUBLIC_DIR}"
+fi
+SITE_TITLE=$(get_config_value 'site_title' "${DOMAIN}")
+WP_LOCALE=$(get_config_value 'locale' 'en_US')
+WP_TYPE=$(get_config_value 'wp_type' "single")
+WP_VERSION=$(get_config_value 'wp_version' 'latest')
+
+PUBLIC_DIR_PATH="${VVV_PATH_TO_SITE%/}"
+if [ ! -z "${PUBLIC_DIR}" ]; then
+  PUBLIC_DIR_PATH="${PUBLIC_DIR_PATH}${PUBLIC_DIR}"
+fi
+
 HTDOCS_REPO=$(get_config_value 'htdocs' '')
 
-# Configure SSH Key permissions
-configure_keys() {
-  # Update permissions for SSH Keys
-  if [ -f "/home/vagrant/.ssh/id_rsa" ]; then
-    chmod 600 /home/vagrant/.ssh/id_rsa
-  fi
-  if [ -f "/home/vagrant/.ssh/id_rsa.pub" ]; then
-    chmod 644 /home/vagrant/.ssh/id_rsa.pub
-  fi
-}
-
-# Make a database, if we don't already have one
-setup_database() {
+# @description Make a database, if we don't already have one
+function setup_database() {
   echo -e " * Creating database '${DB_NAME}' (if it's not already there)"
   mysql -u root --password=root -e "CREATE DATABASE IF NOT EXISTS \`${DB_NAME}\`"
   echo -e " * Granting the wp user priviledges to the '${DB_NAME}' database"
@@ -39,23 +36,96 @@ setup_database() {
   echo -e " * DB operations done."
 }
 
-setup_nginx_folders() {
+function setup_nginx_folders() {
   echo " * Setting up the log subfolder for Nginx logs"
-  noroot mkdir -p "${VVV_PATH_TO_SITE}/log"
-  noroot touch "${VVV_PATH_TO_SITE}/log/nginx-error.log"
-  noroot touch "${VVV_PATH_TO_SITE}/log/nginx-access.log"
-  echo " * Creating public_html folder if it doesn't exist already"
-  noroot mkdir -p "${VVV_PATH_TO_SITE}/public_html"
+  noroot mkdir -p "${VVV_PATH_TO_SITE%/}/log"
+  noroot touch "${VVV_PATH_TO_SITE%/}/log/nginx-error.log"
+  noroot touch "${VVV_PATH_TO_SITE%/}/log/nginx-access.log"
 }
 
-copy_nginx_configs() {
+function setup_public_dir() {
+  echo " * Creating the public folder at '${PUBLIC_DIR}' if it doesn't exist already"
+  noroot mkdir -p "${PUBLIC_DIR_PATH}"
+}
+
+# @description Takes a string and replaces all instances of a token with a value
+function vvv_site_template_search_replace() {
+  local content="$1"
+  local token="$2"
+  local value="$3"
+
+  # Read the file contents and replace the token with the value
+  content=${content//$token/$value}
+  echo "${content}"
+}
+export -f vvv_site_template_search_replace
+
+# @description Takes a file, and replaces all instances of a token with a value
+function vvv_site_template_search_replace_in_file() {
+  local file="$1"
+
+  # Read the file contents and replace the token with the value
+  local content
+  if [[ -f "${file}" ]]; then
+    content=$(<"${file}")
+    vvv_site_template_search_replace "${content}" "${2}" "${3}"
+  else
+    return 1
+  fi
+}
+export -f vvv_site_template_search_replace_in_file
+
+function install_plugins() {
+  WP_PLUGINS=$(get_config_value 'install_plugins' '')
+  if [ ! -z "${WP_PLUGINS}" ]; then
+    isurl='(https?|ftp|file)://[-A-Za-z0-9\+&@#/%?=~_|!:,.;]*[-A-Za-z0-9\+&@#/%=~_|]'
+    for plugin in ${WP_PLUGINS//- /$'\n'}; do
+      if [[ "${plugin}" =~ $isurl ]]; then
+        echo " ! Warning, a URL was found for this plugin, attempting install and activate with --force set for ${plugin}"
+        noroot wp plugin install "${plugin}" --activate --force
+      else
+        if noroot wp plugin is-installed "${plugin}"; then
+          echo " * The ${plugin} plugin is already installed."
+        else
+          echo " * Installing and activating plugin: '${plugin}'"
+          noroot wp plugin install "${plugin}" --activate
+        fi
+      fi
+    done
+  fi
+}
+
+function install_themes() {
+  WP_THEMES=$(get_config_value 'install_themes' '')
+  if [ ! -z "${WP_THEMES}" ]; then
+      isurl='(https?|ftp|file)://[-A-Za-z0-9\+&@#/%?=~_|!:,.;]*[-A-Za-z0-9\+&@#/%=~_|]'
+      for theme in ${WP_THEMES//- /$'\n'}; do
+        if [[ "${theme}" =~ $isurl ]]; then
+          echo " ! Warning, a URL was found for this theme, attempting install of ${theme} with --force set"
+          noroot wp theme install --force "${theme}"
+        else
+          if noroot wp theme is-installed "${theme}"; then
+            echo " * The ${theme} theme is already installed."
+          else
+            echo " * Installing theme: '${theme}'"
+            noroot wp theme install "${theme}"
+          fi
+        fi
+      done
+  fi
+}
+
+function copy_nginx_configs() {
   echo " * Copying the sites Nginx config template"
-  if [ -f "${VVV_PATH_TO_SITE}/provision/vvv-nginx-custom.conf" ]; then
+
+  local NCONFIG
+
+  if [ -f "${VVV_PATH_TO_SITE%/}/provision/vvv-nginx-custom.conf" ]; then
     echo " * A vvv-nginx-custom.conf file was found"
-    cp -f "${VVV_PATH_TO_SITE}/provision/vvv-nginx-custom.conf" "${VVV_PATH_TO_SITE}/provision/vvv-nginx.conf"
+    NCONFIG=$(vvv_site_template_search_replace_in_file "${VVV_PATH_TO_SITE%/}/provision/vvv-nginx-custom.conf" "{vvv_public_dir}" "${PUBLIC_DIR}")
   else
     echo " * Using the default vvv-nginx-default.conf, to customize, create a vvv-nginx-custom.conf"
-    cp -f "${VVV_PATH_TO_SITE}/provision/vvv-nginx-default.conf" "${VVV_PATH_TO_SITE}/provision/vvv-nginx.conf"
+    NCONFIG=$(vvv_site_template_search_replace_in_file "${VVV_PATH_TO_SITE%/}/provision/vvv-nginx-default.conf" "{vvv_public_dir}" "${PUBLIC_DIR}")
   fi
 
   LIVE_URL=$(get_config_value 'live_url' '')
@@ -72,71 +142,170 @@ if (!-e \$request_filename) {
   rewrite ^/wp-content/uploads/(.*)\$ \$scheme://${LIVE_URL}/wp-content/uploads/\$1 redirect;
 }
 END_HEREDOC
-    ) |
-    # pipe and escape new lines of the HEREDOC for usage in sed
-    sed -e ':a' -e 'N' -e '$!ba' -e 's/\n/\\n\\1/g'
+
     )
-    sed -i -e "s|\(.*\){{LIVE_URL}}|\1${redirect_config}|" "${VVV_PATH_TO_SITE}/provision/vvv-nginx.conf"
+    )
+
+    NCONFIG=$(vvv_site_template_search_replace "${NCONFIG}" "{{LIVE_URL}}" "${redirect_config}")
   else
-    sed -i "s#{{LIVE_URL}}##" "${VVV_PATH_TO_SITE}/provision/vvv-nginx.conf"
+    NCONFIG=$(vvv_site_template_search_replace "${NCONFIG}" "{{LIVE_URL}}" "")
+  fi
+
+  NCONFIG=$(vvv_site_template_search_replace "${NCONFIG}" "{{PUBLIC_DIR_PATH}}" "${PUBLIC_DIR_PATH}")
+
+  # Write out the new Nginx file for VVV to pick up.
+  noroot touch  "${VVV_PATH_TO_SITE%/}/provision/vvv-nginx.conf"
+  echo "${NCONFIG}" > "${VVV_PATH_TO_SITE%/}/provision/vvv-nginx.conf"
+}
+
+function setup_wp_config_constants() {
+  set +e
+  noroot shyaml get-values-0 -q "sites.${VVV_SITE_NAME}.custom.wpconfig_constants" < "${VVV_CONFIG}" |
+  while IFS='' read -r -d '' key &&
+        IFS='' read -r -d '' value; do
+      lower_value=$(echo "${value}" | awk '{print tolower($0)}')
+      echo " * Adding constant '${key}' with value '${value}' to wp-config.php"
+      if [ "${lower_value}" == "true" ] || [ "${lower_value}" == "false" ] || [[ "${lower_value}" =~ ^[+-]?[0-9]*$ ]] || [[ "${lower_value}" =~ ^[+-]?[0-9]+\.?[0-9]*$ ]]; then
+        noroot wp config set "${key}" "${value}" --raw
+      else
+        noroot wp config set "${key}" "${value}"
+      fi
+  done
+  set -e
+}
+
+function restore_db_backup() {
+  echo " * Found a database backup at ${1}. Restoring the site"
+  noroot wp config set DB_USER "wp"
+  noroot wp config set DB_PASSWORD "wp"
+  noroot wp config set DB_HOST "localhost"
+  noroot wp config set DB_NAME "${DB_NAME}"
+  noroot wp config set table_prefix "${DB_PREFIX}"
+  noroot wp db import "${1}"
+  echo " * Installed database backup"
+}
+
+# @description Downloads WordPress given a locale and version.
+function download_wordpress() {
+  echo " * Downloading WordPress version '${1}' locale: '${2}'"
+  noroot wp core download --locale="${2}" --version="${1}"
+}
+
+function initial_wpconfig() {
+  echo " * Setting up wp-config.php"
+  noroot wp config create --dbname="${DB_NAME}" --dbprefix="${DB_PREFIX}" --dbuser=wp --dbpass=wp --extra-php <<PHP
+@ini_set( 'display_errors', 0 );
+PHP
+  noroot wp config set WP_DEBUG true --raw
+  noroot wp config set WP_DEBUG_LOG true --raw
+  noroot wp config set WP_DEBUG_DISPLAY false --raw
+  noroot wp config set WP_DISABLE_FATAL_ERROR_HANDLER true --raw
+  noroot wp config set SCRIPT_DEBUG true --raw
+  noroot wp config set JETPACK_DEV_DEBUG true --raw
+  noroot wp config set WP_ENVIRONMENT_TYPE 'development'
+  noroot wp config set WP_LOCAL_DEV true --raw
+  noroot wp config set WP_ENV 'development'
+  noroot wp config set DISALLOW_FILE_EDIT true --raw
+  noroot wp config set DONOTCACHEPAGE true --raw
+  noroot wp config set DONOTROCKETOPTIMIZE true --raw
+  noroot wp config set WPMS_ON true --raw
+  noroot wp config set WPMS_MAILER 'smtp'
+  noroot wp config set WPMS_SMTP_HOST 'vvv.test'
+  noroot wp config set WPMS_SMTP_PORT '1025'
+  noroot wp config set WPMS_SMTP_AUTH false --raw
+  noroot wp config set WPMS_SMTP_AUTOTLS false --raw
+  noroot wp config set WPMS_SSL ''
+  noroot wp config set WPMS_SMTP_USER ''
+  noroot wp config set WPMS_SMTP_PASS ''
+  noroot wp config set MWP_SKIP_BOOTSTRAP true --raw
+  noroot wp config set WPCF7_ADMIN_READ_CAPABILITY 'manage_options'
+  noroot wp config set WPCF7_ADMIN_READ_WRITE_CAPABILITY 'manage_options'
+}
+
+function maybe_import_test_content() {
+  INSTALL_TEST_CONTENT=$(get_config_value 'install_test_content' "")
+  if [ ! -z "${INSTALL_TEST_CONTENT}" ]; then
+    echo " * Downloading test content from github.com/poststatus/wptest/master/wptest.xml"
+    noroot curl -s https://raw.githubusercontent.com/poststatus/wptest/master/wptest.xml > /tmp/import.xml
+    echo " * Installing the wordpress-importer"
+    noroot wp plugin install wordpress-importer
+    echo " * Activating the wordpress-importer"
+    noroot wp plugin activate wordpress-importer
+    echo " * Importing test data"
+    noroot wp import /tmp/import.xml --authors=create
+    echo " * Cleaning up import.xml"
+    rm /tmp/import.xml
+    echo " * Test content installed"
   fi
 }
 
-setup_nginx_certificates() {
-  sed -i "s#{vvv_tls_cert}#ssl_certificate /srv/certificates/${VVV_SITE_NAME}/dev.crt;#" "${VVV_PATH_TO_SITE}/provision/vvv-nginx.conf"
-  sed -i "s#{vvv_tls_key}#ssl_certificate_key /srv/certificates/${VVV_SITE_NAME}/dev.key;#" "${VVV_PATH_TO_SITE}/provision/vvv-nginx.conf"
+function install_wp() {
+  echo " * Installing WordPress"
+  ADMIN_USER=$(get_config_value 'admin_user' "shoreline-admin")
+  ADMIN_PASSWORD=$(get_config_value 'admin_password' "password")
+  ADMIN_EMAIL=$(get_config_value 'admin_email' "team@shoreline.media")
+
+  echo " * Installing using wp core install --url=\"${DOMAIN}\" --title=\"${SITE_TITLE}\" --admin_name=\"${ADMIN_USER}\" --admin_email=\"${ADMIN_EMAIL}\" --admin_password=\"${ADMIN_PASSWORD}\""
+  noroot wp core install --url="${DOMAIN}" --title="${SITE_TITLE}" --admin_name="${ADMIN_USER}" --admin_email="${ADMIN_EMAIL}" --admin_password="${ADMIN_PASSWORD}"
+  echo " * WordPress was installed, with the username '${ADMIN_USER}', and the password '${ADMIN_PASSWORD}' at '${ADMIN_EMAIL}'"
+
+  if [ "${WP_TYPE}" = "subdomain" ]; then
+    echo " * Running Multisite install using wp core multisite-install --subdomains --url=\"${DOMAIN}\" --title=\"${SITE_TITLE}\" --admin_name=\"${ADMIN_USER}\" --admin_email=\"${ADMIN_EMAIL}\" --admin_password=\"${ADMIN_PASSWORD}\""
+    noroot wp core multisite-install --subdomains --url="${DOMAIN}" --title="${SITE_TITLE}" --admin_name="${ADMIN_USER}" --admin_email="${ADMIN_EMAIL}" --admin_password="${ADMIN_PASSWORD}"
+    echo " * Multisite install complete"
+  elif [ "${WP_TYPE}" = "subdirectory" ]; then
+    echo " * Running Multisite install using wp core ${INSTALL_COMMAND} --url=\"${DOMAIN}\" --title=\"${SITE_TITLE}\" --admin_name=\"${ADMIN_USER}\" --admin_email=\"${ADMIN_EMAIL}\" --admin_password=\"${ADMIN_PASSWORD}\""
+    noroot wp core multisite-install --url="${DOMAIN}" --title="${SITE_TITLE}" --admin_name="${ADMIN_USER}" --admin_email="${ADMIN_EMAIL}" --admin_password="${ADMIN_PASSWORD}"
+    echo " * Multisite install complete"
+  fi
+
+  DELETE_DEFAULT_PLUGINS=$(get_config_value 'delete_default_plugins' '')
+  if [ ! -z "${DELETE_DEFAULT_PLUGINS}" ]; then
+    echo " * Deleting the default plugins akismet and hello dolly"
+    noroot wp plugin delete akismet
+    noroot wp plugin delete hello
+  fi
+
+  maybe_import_test_content
 }
 
-initial_wpconfig() {
-  echo "Configuring WordPress Stable..."
-  WP_CACHE_KEY_SALT=`date +%s | sha256sum | head -c 64`
-  noroot wp core config --dbname="${DB_NAME}" --dbuser=wp --dbpass=wp --quiet --extra-php <<PHP
-
-define( 'WP_DEBUG_LOG', true );
-define( 'WP_DEBUG_DISPLAY', false );
-define( 'SCRIPT_DEBUG', true );
-define( 'WP_DISABLE_FATAL_ERROR_HANDLER', true );
-define( 'JETPACK_DEV_DEBUG', true );
-@ini_set( 'display_errors', 0 );
-define( 'WP_ENVIRONMENT_TYPE', 'development' );
-define( 'WP_LOCAL_DEV', true );
-define( 'WP_ENV', 'development' );
-// Disable File Editor
-define('DISALLOW_FILE_EDIT', true);
-/** WP ROCKET DISABLED DURING LOCAL DEV**/
-define( 'DONOTCACHEPAGE', true );
-define( 'DONOTROCKETOPTIMIZE', true );
-/* WP MAIL SMTP Force sending to mailhog locally */
-define( 'WPMS_ON', true );
-define( 'WPMS_MAILER', 'smtp' );
-define( 'WPMS_SMTP_HOST', 'vvv.test' );
-define( 'WPMS_SMTP_PORT', '1025' );
-define( 'WPMS_SMTP_AUTH', false );
-define( 'WPMS_SMTP_AUTOTLS', false );
-define( 'WPMS_SSL', '' );
-define( 'WPMS_SMTP_USER', '' );
-define( 'WPMS_SMTP_PASS', '' );
-
-/* Disable ManageWP plugin for local/dev */
-define( 'MWP_SKIP_BOOTSTRAP', true );
-
-
-/** Contact Form 7 **/
-// Restrict Access to the Contact Forms to Admins only
-define( 'WPCF7_ADMIN_READ_CAPABILITY', 'manage_options' );
-define( 'WPCF7_ADMIN_READ_WRITE_CAPABILITY', 'manage_options' );
-
-// Match any requests made via xip.io.
-if ( isset( \$_SERVER['HTTP_HOST'] ) && preg_match('/^(${VVV_SITE_NAME})\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(.xip.io)\z/', \$_SERVER['HTTP_HOST'] ) ) {
-define( 'WP_HOME', 'http://' . \$_SERVER['HTTP_HOST'] );
-define( 'WP_SITEURL', 'http://' . \$_SERVER['HTTP_HOST'] );
+function update_wp() {
+  if [[ $(noroot wp core version) > "${WP_VERSION}" ]]; then
+    echo " * Installing an older version '${WP_VERSION}' of WordPress"
+    noroot wp core update --version="${WP_VERSION}" --force
+  else
+    echo " * Updating WordPress '${WP_VERSION}'"
+    noroot wp core update --version="${WP_VERSION}"
+  fi
 }
 
-PHP
+# @description Setup a wp-cli.yml config for easier SSH, replacing any existing WP CLI config.
+# @noargs
+function setup_cli() {
+  rm -f "${VVV_PATH_TO_SITE%/}/wp-cli.yml"
+  echo "# auto-generated file" > "${VVV_PATH_TO_SITE%/}/wp-cli.yml"
+  echo "path: \"${PUBLIC_DIR_PATH}\"" >> "${VVV_PATH_TO_SITE%/}/wp-cli.yml"
+  echo "\"@vvv\":" >> "${VVV_PATH_TO_SITE%/}/wp-cli.yml"
+  echo "  ssh: vagrant" >> "${VVV_PATH_TO_SITE%/}/wp-cli.yml"
+  echo "  path: ${PUBLIC_DIR_PATH}" >> "${VVV_PATH_TO_SITE%/}/wp-cli.yml"
+  echo "\"@${VVV_SITE_NAME}\":" >> "${VVV_PATH_TO_SITE%/}/wp-cli.yml"
+  echo "  ssh: vagrant" >> "${VVV_PATH_TO_SITE%/}/wp-cli.yml"
+  echo "  path: ${PUBLIC_DIR_PATH}" >> "${VVV_PATH_TO_SITE%/}/wp-cli.yml"
 }
 
-# Install liquid prompt for pretty command line formatting
-install_liquidprompt() {
+# @description Configure SSH Key permissions
+function configure_keys() {
+  # Update permissions for SSH Keys
+  if [ -f "/home/vagrant/.ssh/id_rsa" ]; then
+    chmod 600 /home/vagrant/.ssh/id_rsa
+  fi
+  if [ -f "/home/vagrant/.ssh/id_rsa.pub" ]; then
+    chmod 644 /home/vagrant/.ssh/id_rsa.pub
+  fi
+}
+
+# @description Install liquid prompt for pretty command line formatting
+function install_liquidprompt() {
   noroot mkdir /home/vagrant/liquidprompt
   noroot git clone https://github.com/nojhan/liquidprompt.git /home/vagrant/liquidprompt
   source /home/vagrant/liquidprompt/liquidprompt
@@ -158,7 +327,7 @@ EOF
 }
 
 # Install yarn as a new alternative to npm
-install_yarn() {
+function install_yarn() {
   curl -sS https://dl.yarnpkg.com/debian/pubkey.gpg | sudo apt-key add -
   echo "deb https://dl.yarnpkg.com/debian/ stable main" | sudo tee /etc/apt/sources.list.d/yarn.list
 
@@ -166,37 +335,27 @@ install_yarn() {
   sudo apt install --no-install-recommends yarn
 }
 
-# Install bower & gulp
-yarn_global() {
-  echo "---Installing bower & gulp for dependency management & dev tools---"
-  yarn global add bower gulp-cli
-}
-
-# Setup Composer
-setup_composer() {
-  # Install composer required libraries
-  cd ${VVV_PATH_TO_SITE}
-  # noroot composer update 
-  # noroot composer install --no-dev
-  echo -e "Run 'composer install --no-dev' to install base plugins and 'composer install --dev' to install developer plugins"
+# Install gulp
+function yarn_global() {
+  echo "---Installing gulp for dependency management & dev tools---"
+  yarn global add gulp-cli
 }
 
 # Checkout HTDOCS repo
-checkout_htdocs_repo() {
+function checkout_htdocs_repo() {
   if [[ ! -z "$HTDOCS_REPO" ]]; then
 
     # Only checkout GIT repo on initial provision
-    if [[ ! -f "${VVV_PATH_TO_SITE}/public_html/wp-load.php" ]]; then
-      cd ${VVV_PATH_TO_SITE}/public_html
+    if [[ ! -f "${PUBLIC_DIR_PATH}/wp-load.php" ]]; then
+      cd "${PUBLIC_DIR_PATH}"
 
 
-      # Setup our WPEngine starter project in the htdocs/public_html folder
-      # before that folder is created
-      echo "Checking out project from ${HTDOCS_REPO} to ${VVV_PATH_TO_SITE}/public_html/"
+      # Setup our WPEngine starter project in the folder before it's created
+      echo "Checking out project from ${HTDOCS_REPO} to ${PUBLIC_DIR_PATH}"
 
 
       # Create git repository, add origin remote and do first pull
-      echo "Initializing git repo in htdocs/public_html folder"
+      echo "Initializing git repo"
       noroot git init
       echo "Adding git remote"
       noroot git remote add origin "${HTDOCS_REPO}"
@@ -208,7 +367,7 @@ checkout_htdocs_repo() {
   fi
 }
 
-replace_custom_provision_scripts() {
+function replace_custom_provision_scripts() {
   # Copy conf file with curly brace placeholders to actual file not controlled by git
   cp -f "${VVV_PATH_TO_SITE}/provision/.update-local.sh.conf" "${VVV_PATH_TO_SITE}/provision/update-local.sh"
 
@@ -218,60 +377,62 @@ replace_custom_provision_scripts() {
   sed -i "s#{vvv_path_to_site}#${VVV_PATH_TO_SITE}#" "${VVV_PATH_TO_SITE}/provision/update-local.sh"
 }
 
-configure_keys
+# initial working directory
+cd "${VVV_PATH_TO_SITE}"
+
 setup_database
 setup_nginx_folders
+setup_public_dir
+setup_cli
 
-# Setup Nginx config
-copy_nginx_configs
-
-# Replace domains in config template
-sed -i "s#{{DOMAINS_HERE}}#${DOMAINS}#" "${VVV_PATH_TO_SITE}/provision/vvv-nginx.conf"
-
-setup_nginx_certificates
+# Run this before VVV does it's normal WP installation check so we can clone
+# the specified repo into a clean directory without any other files being 
+# placed there first
 checkout_htdocs_repo
 
-cd ${VVV_PATH_TO_SITE}/public_html
+# Start working inside WP public_dir
+cd "${PUBLIC_DIR_PATH}"
 
-# Install and configure the latest stable version of WordPress
-if [[ ! -f "${VVV_PATH_TO_SITE}/public_html/wp-load.php" ]]; then
-    echo "Downloading WordPress..."
-	noroot wp core download --version="${WP_VERSION}"
-fi
+if [ "${WP_TYPE}" == "none" ]; then
+  echo " * wp_type was set to none, provisioning WP was skipped, moving to Nginx configs"
+else
+  echo " * Install type is '${WP_TYPE}'"
 
-if [[ ! -f "${VVV_PATH_TO_SITE}/public_html/wp-config.php" ]]; then
-  initial_wpconfig
-fi
-
-if ! $(noroot wp core is-installed); then
-  echo "Installing WordPress Stable..."
-
-  if [ "${WP_TYPE}" = "subdomain" ]; then
-    INSTALL_COMMAND="multisite-install --subdomains"
-  elif [ "${WP_TYPE}" = "subdirectory" ]; then
-    INSTALL_COMMAND="multisite-install"
-  else
-    INSTALL_COMMAND="install"
+  # Install and configure the latest stable version of WordPress
+  if [[ ! -f "${PUBLIC_DIR_PATH}/wp-load.php" ]]; then
+    download_wordpress "${WP_VERSION}" "${WP_LOCALE}"
   fi
 
-  noroot wp core ${INSTALL_COMMAND} --url="${DOMAIN}" --quiet --title="${SITE_TITLE}" --admin_name="${ADMIN_NAME}" --admin_email="${ADMIN_EMAIL}" --admin_password="${ADMIN_PASSWORD}"
-else
-  echo "Updating WordPress Stable..."
-  cd ${VVV_PATH_TO_SITE}/public_html
-  noroot wp core update --version="${WP_VERSION}"
+  if [[ ! -f "${PUBLIC_DIR_PATH}/wp-config.php" ]]; then
+    initial_wpconfig
+  fi
+
+  if ! $(noroot wp core is-installed ); then
+    echo " * WordPress is present but isn't installed to the database, checking for SQL dumps in wp-content/database.sql or the main backup folder."
+    if [ -f "${PUBLIC_DIR_PATH}/wp-content/database.sql" ]; then
+      restore_db_backup "${PUBLIC_DIR_PATH}/wp-content/database.sql"
+    elif [ -f "/srv/database/backups/${VVV_SITE_NAME}.sql" ]; then
+      restore_db_backup "/srv/database/backups/${VVV_SITE_NAME}.sql"
+    else
+      install_wp
+    fi
+  else
+    update_wp
+  fi
 fi
 
-setup_composer
-install_yarn
-yarn_global
+copy_nginx_configs
+setup_wp_config_constants
 
 # Install Liquidprompt on first provision only
 if [[ ! -d "/home/vagrant/liquidprompt" ]]; then
   install_liquidprompt
 fi
-
-# Replace variables in custom provision scripts
+install_yarn
+yarn_global
+configure_keys
 replace_custom_provision_scripts
-
+install_plugins
+install_themes
 
 echo " * Site Template provisioner script completed for ${VVV_SITE_NAME}"
