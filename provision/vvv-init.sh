@@ -229,6 +229,7 @@ PHP
   noroot wp config set MWP_SKIP_BOOTSTRAP true --raw
   noroot wp config set WPCF7_ADMIN_READ_CAPABILITY 'manage_options'
   noroot wp config set WPCF7_ADMIN_READ_WRITE_CAPABILITY 'manage_options'
+  noroot wp config set SHORELINE_SEO_SKIP_SQL_DELETE true --raw
 }
 
 function maybe_import_test_content() {
@@ -386,6 +387,12 @@ function replace_custom_provision_scripts() {
   sed -i "s#{vvv_path_to_site}#${VVV_PATH_TO_SITE}#" "${VVV_PATH_TO_SITE}/provision/update-local.sh"
 }
 
+function create_sql_directory() {
+  if [[ ! -d "${PUBLIC_DIR_PATH}/wp-content/database-backups" ]]; then
+    noroot mkdir -p "${PUBLIC_DIR_PATH}/wp-content/database-backups"
+  fi
+}
+
 # initial working directory
 cd "${VVV_PATH_TO_SITE}"
 
@@ -443,5 +450,6 @@ configure_keys
 replace_custom_provision_scripts
 install_plugins
 install_themes
+create_sql_directory
 
 echo " * Site Template provisioner script completed for ${VVV_SITE_NAME}"
