@@ -230,6 +230,7 @@ PHP
   noroot wp config set WPCF7_ADMIN_READ_CAPABILITY 'manage_options'
   noroot wp config set WPCF7_ADMIN_READ_WRITE_CAPABILITY 'manage_options'
   noroot wp config set SHORELINE_SEO_SKIP_SQL_DELETE true --raw
+  noroot wp config set RANKMATH_DEBUG true --raw
 }
 
 function maybe_import_test_content() {
