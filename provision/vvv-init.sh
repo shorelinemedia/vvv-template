@@ -219,7 +219,7 @@ PHP
   noroot wp config set DONOTROCKETOPTIMIZE true --raw
   noroot wp config set WPMS_ON true --raw
   noroot wp config set WPMS_MAILER 'smtp'
-  noroot wp config set WPMS_SMTP_HOST 'vvv.test'
+  noroot wp config set WPMS_SMTP_HOST '127.0.0.1'
   noroot wp config set WPMS_SMTP_PORT '1025'
   noroot wp config set WPMS_SMTP_AUTH false --raw
   noroot wp config set WPMS_SMTP_AUTOTLS false --raw
