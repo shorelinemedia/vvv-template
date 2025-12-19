@@ -332,16 +332,6 @@ function checkout_htdocs_repo() {
   fi
 }
 
-function replace_custom_provision_scripts() {
-  # Copy conf file with curly brace placeholders to actual file not controlled by git
-  cp -f "${VVV_PATH_TO_SITE}/provision/.update-local.sh.conf" "${VVV_PATH_TO_SITE}/provision/update-local.sh"
-
-  # Replace the {curly_brace_placeholder} text with info from vvv config
-  sed -i "s#{vvv_primary_domain}#${DOMAIN}#" "${VVV_PATH_TO_SITE}/provision/update-local.sh"
-  sed -i "s#{vvv_site_name}#${VVV_SITE_NAME}#" "${VVV_PATH_TO_SITE}/provision/update-local.sh"
-  sed -i "s#{vvv_path_to_site}#${VVV_PATH_TO_SITE}#" "${VVV_PATH_TO_SITE}/provision/update-local.sh"
-}
-
 function create_sql_directory() {
   if [[ ! -d "${PUBLIC_DIR_PATH}/wp-content/database-backups" ]]; then
     noroot mkdir -p "${PUBLIC_DIR_PATH}/wp-content/database-backups"
@@ -396,7 +386,6 @@ copy_nginx_configs
 setup_wp_config_constants
 
 configure_keys
-replace_custom_provision_scripts
 install_plugins
 install_themes
 create_sql_directory
