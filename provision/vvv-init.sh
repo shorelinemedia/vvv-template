@@ -295,17 +295,6 @@ function setup_cli() {
   echo "  path: ${PUBLIC_DIR_PATH}" >> "${VVV_PATH_TO_SITE%/}/wp-cli.yml"
 }
 
-# @description Configure SSH Key permissions
-function configure_keys() {
-  # Update permissions for SSH Keys
-  if [ -f "/home/vagrant/.ssh/id_rsa" ]; then
-    chmod 600 /home/vagrant/.ssh/id_rsa
-  fi
-  if [ -f "/home/vagrant/.ssh/id_rsa.pub" ]; then
-    chmod 644 /home/vagrant/.ssh/id_rsa.pub
-  fi
-}
-
 # Checkout HTDOCS repo
 function checkout_htdocs_repo() {
   if [[ ! -z "$HTDOCS_REPO" ]]; then
@@ -384,8 +373,6 @@ fi
 
 copy_nginx_configs
 setup_wp_config_constants
-
-configure_keys
 install_plugins
 install_themes
 create_sql_directory
