@@ -17,8 +17,3 @@
 !README.md
 !/provision/vvv-init.sh
 !/provision/vvv-nginx-default.conf
-
-# And don't ignore our custom stuff
-!composer.json
-!/provision/.update-local.sh.conf
-!/provision/optimize-images.sh
