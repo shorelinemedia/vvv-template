@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Provision WordPress Stable
 
-# Quit out of the provisioner if something fails, like checking out htdocs
+# Quit out of the provisioner if something fails
 set -eo pipefail
 
 echo " * Custom site template provisioner ${VVV_SITE_NAME} - downloads and installs a copy of WP stable for testing, building client sites, etc"
@@ -24,8 +24,6 @@ PUBLIC_DIR_PATH="${VVV_PATH_TO_SITE%/}"
 if [ ! -z "${PUBLIC_DIR}" ]; then
   PUBLIC_DIR_PATH="${PUBLIC_DIR_PATH}${PUBLIC_DIR}"
 fi
-
-HTDOCS_REPO=$(get_config_value 'htdocs' '')
 
 # @description Make a database, if we don't already have one
 function setup_database() {
@@ -295,32 +293,6 @@ function setup_cli() {
   echo "  path: ${PUBLIC_DIR_PATH}" >> "${VVV_PATH_TO_SITE%/}/wp-cli.yml"
 }
 
-# Checkout HTDOCS repo
-function checkout_htdocs_repo() {
-  if [[ ! -z "$HTDOCS_REPO" ]]; then
-
-    # Only checkout GIT repo on initial provision
-    if [[ ! -f "${PUBLIC_DIR_PATH}/wp-load.php" ]]; then
-      cd "${PUBLIC_DIR_PATH}"
-
-
-      # Setup our WPEngine starter project in the folder before it's created
-      echo "Checking out project from ${HTDOCS_REPO} to ${PUBLIC_DIR_PATH}"
-
-
-      # Create git repository, add origin remote and do first pull
-      echo "Initializing git repo"
-      noroot git init
-      echo "Adding git remote"
-      noroot git remote add origin "${HTDOCS_REPO}"
-      echo "Pulling master branch from ${HTDOCS_REPO}"
-      noroot git pull --recurse-submodules origin master --force
-      cd ${VVV_PATH_TO_SITE}
-    fi
-
-  fi
-}
-
 function create_sql_directory() {
   if [[ ! -d "${PUBLIC_DIR_PATH}/wp-content/database-backups" ]]; then
     noroot mkdir -p "${PUBLIC_DIR_PATH}/wp-content/database-backups"
@@ -334,11 +306,6 @@ setup_database
 setup_nginx_folders
 setup_public_dir
 setup_cli
-
-# Run this before VVV does it's normal WP installation check so we can clone
-# the specified repo into a clean directory without any other files being 
-# placed there first
-checkout_htdocs_repo
 
 # Start working inside WP public_dir
 cd "${PUBLIC_DIR_PATH}"
