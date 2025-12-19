@@ -315,43 +315,6 @@ function configure_keys() {
   fi
 }
 
-# @description Install liquid prompt for pretty command line formatting
-function install_liquidprompt() {
-  noroot mkdir /home/vagrant/liquidprompt
-  noroot git clone https://github.com/nojhan/liquidprompt.git /home/vagrant/liquidprompt
-  source /home/vagrant/liquidprompt/liquidprompt
-
-  # Copy liquidprompt config
-  noroot cp /home/vagrant/liquidprompt/liquidpromptrc-dist /home/vagrant/.config/liquidpromptrc
-
-  # Add to .bashrc
-  noroot cat <<- "EOF" >> /home/vagrant/.bashrc
-
-# Only load Liquid Prompt in interactive shells, not from a script or from scp
-[[ $- = *i* ]] && source /home/vagrant/liquidprompt/liquidprompt
-
-EOF
-
-  # Update settings in config
-  PATHLENGTH=16
-  sed "s/LP_PATH_LENGTH\=[0-9]*/LP_PATH_LENGTH=${PATHLENGTH}/" /home/vagrant/.config/liquidpromptrc
-}
-
-# Install yarn as a new alternative to npm
-function install_yarn() {
-  curl -sS https://dl.yarnpkg.com/debian/pubkey.gpg | sudo apt-key add -
-  echo "deb https://dl.yarnpkg.com/debian/ stable main" | sudo tee /etc/apt/sources.list.d/yarn.list
-
-  sudo apt update
-  sudo apt install --no-install-recommends yarn
-}
-
-# Install gulp
-function yarn_global() {
-  echo "---Installing gulp for dependency management & dev tools---"
-  yarn global add gulp-cli
-}
-
 # Checkout HTDOCS repo
 function checkout_htdocs_repo() {
   if [[ ! -z "$HTDOCS_REPO" ]]; then
@@ -441,12 +404,6 @@ fi
 copy_nginx_configs
 setup_wp_config_constants
 
-# Install Liquidprompt on first provision only
-if [[ ! -d "/home/vagrant/liquidprompt" ]]; then
-  install_liquidprompt
-fi
-install_yarn
-yarn_global
 configure_keys
 replace_custom_provision_scripts
 install_plugins
