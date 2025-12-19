@@ -1,17 +1,10 @@
-# Shoreline VVV Custom Site Provisioner
-
-[![Codacy Badge](https://api.codacy.com/project/badge/Grade/6fc9d45abb02454aa052771bda2d40ff)](https://www.codacy.com/gh/Varying-Vagrant-Vagrants/custom-site-template?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=Varying-Vagrant-Vagrants/custom-site-template&amp;utm_campaign=Badge_Grade)
-
+# Justin's Shoreline VVV Custom Site Provisioner
 This tells VVV how to install WordPress and set up Nginx, great for doing development work or testing out plugins and themes.
-
-_Note that this repository is not a place to put your website. Create a new git repo to hold WordPress and the contents of `public_html`. See the VVV documentation for more details_
-
  - [Overview](#overview)
  - [Custom Configuration Options](#custom-configuration-options)
  - [Custom Nginx configs](#custom-nginx-configs)
  - [Using Git for your site](#using-git-for-your-site)
  - [Examples](#examples)
- - [Quirks](#quirks)
 
 ## Overview
 
@@ -31,6 +24,7 @@ These are custom options unique to the custom site template, and go in the `cust
 ```yaml
   my-site:
     repo: https://github.com/shorelinemedia/vvv-template.git
+    branch: justin
     hosts:
       - foo.test
     custom:
@@ -81,6 +75,7 @@ A standard WordPress site:
 ```yaml
   my-site:
     repo: https://github.com/shorelinemedia/vvv-template.git
+    branch: justin
     hosts:
       - my-site.test
 ```
@@ -98,6 +93,7 @@ A standard WordPress site:
 ```yaml
   my-site:
     repo: https://github.com/shorelinemedia/vvv-template.git
+    branch: justin
     hosts:
       - foo.test
     custom:
@@ -119,6 +115,7 @@ Replace the VIP Go skeleton URL with your client repository then reprovision, th
 ```yaml
   vip:
     repo: https://github.com/shorelinemedia/vvv-template.git.git
+    branch: justin
     hosts:
       - vip.test
     folders:
@@ -148,7 +145,7 @@ Useful for when you already have a WordPress install you want to copy into place
 
 ```yaml
   my-site:
-    repo: https://github.com/shorelinemedia/vvv-template.git
+    repo: https://github.com/Varying-Vagrant-Vagrants/custom-site-template
     hosts:
       - foo.test
     custom:
@@ -168,7 +165,7 @@ A `provision/vvv-nginx-custom.conf` will be need for custom routing to work if i
 
 ```yaml
   drupal-site:
-    repo: https://github.com/shorelinemedia/vvv-template.git
+    repo: https://github.com/Varying-Vagrant-Vagrants/custom-site-template
     hosts:
       - drupal.test
     custom:
@@ -186,6 +183,7 @@ A `provision/vvv-nginx-custom.conf` will be need for custom routing to work if i
 ```yaml
   my-site:
     repo: https://github.com/shorelinemedia/vvv-template.git
+    branch: justin
     hosts:
       - multisite.test
       - site1.multisite.test
@@ -206,6 +204,7 @@ A `provision/vvv-nginx-custom.conf` will be need for custom routing to work if i
 ```yaml
   my-site:
     repo: https://github.com/shorelinemedia/vvv-template.git
+    branch: justin
     hosts:
       - multisite.test
     custom:
@@ -273,7 +272,6 @@ Other parameters available:
 
 ```yaml
 custom:
-    htdocs: https://github.com/{user}/{proj} # Allows cloning a repo into public_html before WP is installed
     delete_default_plugins: true # Only on install of WordPress
     install_test_content: true # Install test content. Only on install of WordPress
     install_plugins: # Various way to install a plugin
@@ -289,17 +287,4 @@ custom:
     admin_password: password # Only on install of WordPress
     admin_email: admin@local.test # Only on install of WordPress
     live_url: http://example.com # Redirect any uploads not found locally to this domain
-```
-
-## Quirks
-
-### Composer plugin installation
-This vvv template already contains the ability to install plugins and themes as needed by updating the `config/config.yml` file. However, if you'd like to use Composer to install plugins via WPackagist, run `composer install --no-dev` to install base plugins and `composer install --dev` to install developer plugins. Check `composer.json` for the current list of plugins.
-
-### ImageMagick PDF error using regenerate thumbnails
-Imagemagick changed the security policy on PDFs so regenerating thumbnails/jpgs for PDF files in the 
-media gallery may not work, even on production.  To update the setting locally run the following command:
-
-```
-sudo sed -i 's/^.*policy.*coder.*none.*PDF.*//' /etc/ImageMagick-6/policy.xml
 ```
